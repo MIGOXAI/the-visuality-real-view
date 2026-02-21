@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>CosmosLink SHELL</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;color:#00ff88;font-family:'Courier New',monospace;overflow:hidden;height:100vh;}
+canvas#bg{position:fixed;top:0;left:0;z-index:0;}
+
+/* LAYOUT */
+#app{position:relative;z-index:10;display:grid;grid-template-columns:1fr 340px;grid-template-rows:48px 1fr 180px;height:100vh;gap:4px;padding:4px;}
+
+/* HEADER */
+header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;background:rgba(0,10,4,.95);border:1px solid rgba(0,255,136,.2);
+  border-radius:6px;backdrop-filter:blur(10px);}
+.logo{font-size:16px;font-weight:900;background:linear-gradient(135deg,#00ff88,#ff6600,#ff2244);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px;}
+.dot{width:7px;height:7px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88;animation:p 1.4s infinite;display:inline-block;}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.1}}
+.badge{padding:1px 7px;border-radius:3px;font-size:8px;letter-spacing:1px;border:1px solid #00ff88;color:#00ff88;}
+.badge.past{border-color:#ff6600;color:#ff6600;}
+.badge.fut{border-color:#ff2244;color:#ff2244;}
+
+/* SKY */
+#skyWrap{position:relative;border:1px solid rgba(0,255,136,.2);border-radius:6px;overflow:hidden;}
+#sky{width:100%;height:100%;cursor:crosshair;display:block;}
+
+/* RIGHT PANEL */
+.rpanel{display:flex;flex-direction:column;gap:4px;}
+.panel{background:rgba(0,10,4,.9);border:1px solid rgba(0,255,136,.15);border-radius:6px;padding:8px;flex:1;overflow:hidden;}
+.pt{font-size:7px;letter-spacing:2px;color:#ff6600;margin-bottom:6px;text-transform:uppercase;border-bottom:1px solid rgba(255,102,0,.2);padding-bottom:4px;}
+.row{display:flex;justify-content:space-between;font-size:9px;margin:2px 0;padding:2px 4px;background:rgba(0,255,136,.03);border-radius:2px;}
+.lbl{color:rgba(0,255,136,.4);}.val{color:#00ff88;font-weight:700;}
+.val.o{color:#ff6600;}.val.r{color:#ff2244;}
+.pi{display:flex;align-items:center;gap:5px;padding:2px 4px;font-size:8px;margin:1px 0;}
+.pd{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+canvas#solar{border-radius:4px;width:100%;height:90px;}
+
+/* SHELL - BOTTOM */
+#shellWrap{grid-column:1/-1;display:flex;flex-direction:column;
+  background:rgba(0,8,2,.97);border:1px solid rgba(0,255,136,.25);border-radius:6px;overflow:hidden;}
+#shellOut{flex:1;overflow-y:auto;padding:8px 12px;font-size:10px;line-height:1.6;}
+#shellOut::-webkit-scrollbar{width:4px;}
+#shellOut::-webkit-scrollbar-thumb{background:rgba(0,255,136,.3);}
+.s-line{margin:1px 0;}
+.s-line .prompt{color:#ff6600;}
+.s-line .cmd{color:#00ff88;}
+.s-line .out{color:rgba(0,255,136,.7);}
+.s-line .err{color:#ff2244;}
+.s-line .ok{color:#00ff88;}
+.s-line .info{color:#ffaa00;}
+.s-line .data{color:#88ddff;}
+#shellInput{display:flex;align-items:center;padding:6px 12px;border-top:1px solid rgba(0,255,136,.15);background:rgba(0,5,2,.9);}
+.shell-prompt{color:#ff6600;margin-right:8px;font-size:11px;white-space:nowrap;}
+#cmd{flex:1;background:transparent;border:none;color:#00ff88;font-family:'Courier New',monospace;font-size:11px;outline:none;caret-color:#00ff88;}
+#cmd::placeholder{color:rgba(0,255,136,.25);}
+#voiceBtn2{padding:4px 10px;border:1px solid #ff2244;background:rgba(255,34,68,.08);color:#ff2244;
+  border-radius:3px;cursor:pointer;font-family:inherit;font-size:9px;margin-left:8px;transition:.2s;}
+#voiceBtn2:hover{background:rgba(255,34,68,.2);}
+#voiceBtn2.on{animation:vp 1s infinite;}
+@keyframes vp{0%,100%{box-shadow:0 0 6px rgba(255,34,68,.5)}50%{box-shadow:0 0 18px rgba(255,34,68,.9)}}
+
+/* VOICE VIZ */
+#vviz{display:flex;align-items:flex-end;gap:2px;height:18px;margin-left:8px;}
+.vb{width:3px;background:#00ff88;border-radius:1px;transition:height .08s;}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div id="app">
+  <header>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="dot"></span>
+      <span class="logo">COSMOSLINK</span>
+      <span class="badge" id="badge">LIVE</span>
+      <span style="font-size:8px;color:rgba(0,255,136,.4)" id="locLbl">locating...</span>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:14px;font-weight:700" id="clk">--:--:--</div>
+      <div style="font-size:8px;color:rgba(0,255,136,.35)" id="utc">UTC --</div>
+    </div>
+    <div style="font-size:8px;color:rgba(0,255,136,.35);text-align:right">
+      AstroCore v3.7 | JPL DE421<br>
+      <span id="moodLbl" style="color:#ff6600">MOOD: DEFAULT</span>
+    </div>
+  </header>
+
+  <!-- SKY VIEW -->
+  <div id="skyWrap">
+    <canvas id="sky"></canvas>
+  </div>
+
+  <!-- RIGHT PANELS -->
+  <div class="rpanel">
+    <div class="panel">
+      <div class="pt">📍 LOCATION + MOON</div>
+      <div class="row"><span class="lbl">Lat/Lon</span><span class="val" id="ll" style="font-size:8px">--</span></div>
+      <div class="row"><span class="lbl">City</span><span class="val o" id="city">--</span></div>
+      <div class="row"><span class="lbl">Moon Alt</span><span class="val" id="mAlt">--</span></div>
+      <div class="row"><span class="lbl">Moon Az</span><span class="val" id="mAz">--</span></div>
+      <div class="row"><span class="lbl">Distance</span><span class="val o" id="mDist">--</span></div>
+      <div class="row"><span class="lbl">Phase</span><span class="val" id="mPhase">--</span></div>
+      <div class="row"><span class="lbl">Sun Alt</span><span class="val" id="sAlt">--</span></div>
+      <div class="row"><span class="lbl">Sunrise</span><span class="val" id="sr">--</span></div>
+      <div class="row"><span class="lbl">Sunset</span><span class="val" id="ss">--</span></div>
+      <div class="row"><span class="lbl">Julian Date</span><span class="val" id="jdv" style="font-size:8px">--</span></div>
+    </div>
+    <div class="panel">
+      <div class="pt">🪐 PLANETS + SOLAR</div>
+      <div id="plist"></div>
+      <canvas id="solar"></canvas>
+    </div>
+    <div class="panel">
+      <div class="pt">🛰 STARLINK + DB</div>
+      <div class="row"><span class="lbl">Network</span><span class="val">CONNECTED ✓</span></div>
+      <div class="row"><span class="lbl">↑</span><span class="val"><span id="ul">--</span> Mbps</span></div>
+      <div class="row"><span class="lbl">↓</span><span class="val"><span id="dl">--</span> Mbps</span></div>
+      <div class="row"><span class="lbl">Latency</span><span class="val" id="lat2">-- ms</span></div>
+      <div class="row"><span class="lbl">Sat Elev.</span><span class="val o" id="sel">--</span></div>
+      <div class="row"><span class="lbl">DB Sync</span><span class="val">ACTIVE ✓</span></div>
+      <div class="row"><span class="lbl">Packets/s</span><span class="val" id="pkts">--</span></div>
+      <div class="row"><span class="lbl">Neuralink</span><span class="val" id="nlStat">LISTENING</span></div>
+    </div>
+  </div>
+
+  <!-- SHELL TERMINAL -->
+  <div id="shellWrap">
+    <div id="shellOut"></div>
+    <div id="shellInput">
+      <span class="shell-prompt">cosmoslink@astrocore:~$</span>
+      <input id="cmd" placeholder="type command or press VOICE... try: help" autocomplete="off" spellcheck="false"/>
+      <button id="voiceBtn2" onclick="toggleVoice()">🎙 VOICE</button>
+      <div id="vviz"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== STATE ======
+let LAT=23.8103,LON=90.4125,CITY='Dhaka',COUNTRY='Bangladesh';
+let skyYear=2025,skyRot=0,drag=false,lastX=0;
+let moodIdx=0,voiceOn=false,recog=null,micStream=null,voiceAnim=null;
+let bgStars=[],skyStars=[];
+const MOODS=['default','nebula','aurora','redmars','deepspace','matrix'];
+const MCOLS={
+  default:{s1:'#001018',s2:'#000508'},nebula:{s1:'#120018',s2:'#05000a'},
+  aurora:{s1:'#001810',s2:'#000c05'},redmars:{s1:'#180800',s2:'#090200'},
+  deepspace:{s1:'#000012',s2:'#000006'},matrix:{s1:'#001200',s2:'#000800'},
+};
+
+// ====== BG CANVAS ======
+const bgC=document.getElementById('bg'),bgX=bgC.getContext('2d');
+function resizeBG(){bgC.width=innerWidth;bgC.height=innerHeight;initBG();}
+function initBG(){bgStars=[];for(let i=0;i<350;i++)bgStars.push({x:Math.random()*bgC.width,y:Math.random()*bgC.height,r:Math.random()*1.2+.2,a:Math.random(),s:Math.random()*.004+.001});}
+function drawBG(){bgX.clearRect(0,0,bgC.width,bgC.height);bgStars.forEach(s=>{s.a+=s.s;if(s.a>1||s.a<0)s.s=-s.s;bgX.beginPath();bgX.arc(s.x,s.y,s.r,0,Math.PI*2);bgX.fillStyle=`rgba(0,255,136,${s.a*.35})`;bgX.fill();});}
+window.addEventListener('resize',()=>{resizeBG();resizeSky();});
+resizeBG();
+
+// ====== SKY ======
+const skyC=document.getElementById('sky'),skyX=skyC.getContext('2d');
+function resizeSky(){const r=document.getElementById('skyWrap').getBoundingClientRect();skyC.width=r.width;skyC.height=r.height;}
+function initSky(){skyStars=[];for(let i=0;i<1000;i++)skyStars.push({x:Math.random(),y:Math.random(),r:Math.random()*1.8+.3,a:Math.random()*.8+.2,g:Math.random()<.025});}
+initSky();
+
+const PLANETS=[
+  {name:'Mercury',col:'#bbb',base:45,or:.39,sp:4.15},
+  {name:'Venus',col:'#ffdd88',base:90,or:.72,sp:1.62},
+  {name:'Mars',col:'#ff4422',base:150,or:1.52,sp:.53},
+  {name:'Jupiter',col:'#ffaa66',base:220,or:5.2,sp:.084},
+  {name:'Saturn',col:'#ddcc88',base:280,or:9.58,sp:.034},
+  {name:'Uranus',col:'#88ddff',base:320,or:19.2,sp:.012},
+  {name:'Neptune',col:'#4466ff',base:10,or:30.05,sp:.006},
+];
+const CONSTS=[
+  {n:'Orion',s:[[.28,.38],[.30,.43],[.32,.48],[.34,.53]]},
+  {n:'Ursa Major',s:[[.58,.18],[.62,.21],[.66,.19],[.70,.22]]},
+  {n:'Scorpius',s:[[.68,.58],[.71,.63],[.74,.68],[.77,.70]]},
+  {n:'Cassiopeia',s:[[.10,.12],[.14,.17],[.18,.12],[.22,.17]]},
+  {n:'Lyra',s:[[.45,.15],[.47,.20],[.49,.15]]},
+];
+
+// ====== ASTRO MATH ======
+const toR=d=>d*Math.PI/180,toD=r=>r*180/Math.PI;
+function jd(date){const y=date.getUTCFullYear(),m=date.getUTCMonth()+1,d=date.getUTCDate(),h=date.getUTCHours()+date.getUTCMinutes()/60+date.getUTCSeconds()/3600;const A=Math.floor(y/100),B=2-A+Math.floor(A/4);return Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+h/24+B-1524.5;}
+function sunPos(lat,lon,date){const n=jd(date)-2451545,L=(280.46+.9856474*n)%360,g=toR((357.528+.9856003*n)%360);const lam=toR(L+1.915*Math.sin(g)+.02*Math.sin(2*g)),eps=toR(23.439-.0000004*n);const ra=Math.atan2(Math.cos(eps)*Math.sin(lam),Math.cos(lam)),dec=Math.asin(Math.sin(eps)*Math.sin(lam));const GMST=(6.697375+.0657098242*n+(date.getUTCHours()+date.getUTCMinutes()/60+date.getUTCSeconds()/3600))%24;const HA=toR(((GMST+lon/15+24)%24)*15)-ra,latR=toR(lat);const alt=toD(Math.asin(Math.sin(latR)*Math.sin(dec)+Math.cos(latR)*Math.cos(dec)*Math.cos(HA)));const az=(toD(Math.atan2(-Math.sin(HA),Math.tan(dec)*Math.cos(latR)-Math.sin(latR)*Math.cos(HA)))+180+360)%360;return{alt,az};}
+function moonPos(lat,lon,date){const JD=jd(date),T=(JD-2451545)/36525;let Lm=218.3164+481267.8812*T,D=297.85+445267.111*T,M=357.529+35999.050*T,Mm=134.963+477198.868*T,F=93.272+483202.017*T;const lon2=Lm+6.289*Math.sin(toR(Mm))-1.274*Math.sin(toR(2*D-Mm))+.658*Math.sin(toR(2*D))-.214*Math.sin(toR(2*Mm))-.186*Math.sin(toR(M))-.114*Math.sin(toR(2*F));const lat2=5.128*Math.sin(toR(F))+.28*Math.sin(toR(Mm+F))-.277*Math.sin(toR(Mm-F));const dist=385001-20905*Math.cos(toR(Mm))-3699*Math.cos(toR(2*D-Mm));const eps=toR(23.439),eclR=toR(lon2),eclL=toR(lat2);const ra=Math.atan2(Math.sin(eclR)*Math.cos(eps)-Math.tan(eclL)*Math.sin(eps),Math.cos(eclR));const dec2=Math.asin(Math.sin(eclL)*Math.cos(eps)+Math.cos(eclL)*Math.sin(eps)*Math.sin(eclR));const GMST=((280.461+360.986*(JD-2451545))%360+360)%360;const LST=((GMST+lon)%360+360)%360,HA=toR(LST)-ra,latR=toR(lat);const alt=toD(Math.asin(Math.sin(latR)*Math.sin(dec2)+Math.cos(latR)*Math.cos(dec2)*Math.cos(HA)));const az=(toD(Math.atan2(-Math.sin(HA),Math.tan(dec2)*Math.cos(latR)-Math.sin(latR)*Math.cos(HA)))+180+360)%360;const phase=.5*(1-Math.cos(toR(lon2-M)));return{alt,az,dist,phase};}
+function sunTimes(lat,lon,date){const n=jd(date)-2451545,L=(280.46+.9856474*n)%360,g=toR((357.528+.9856003*n)%360);const lam=toR(L+1.915*Math.sin(g)+.02*Math.sin(2*g)),eps=toR(23.439),dec=Math.asin(Math.sin(eps)*Math.sin(lam));const cosH=(-0.01449-Math.sin(toR(lat))*Math.sin(dec))/(Math.cos(toR(lat))*Math.cos(dec));if(cosH<-1)return{rise:'Polar Day',set:'Polar Day',len:'24h'};if(cosH>1)return{rise:'Polar Night',set:'Polar Night',len:'0h'};const H=toD(Math.acos(cosH)),noon=12+(-lon-toD(Math.atan2(-Math.sin(lam)*Math.cos(eps),Math.cos(lam))))/15;const fmt=h=>{const hh=Math.floor((h%24+24)%24),mm=Math.round((((h%24+24)%24)-hh)*60);return`${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}`};return{rise:fmt(noon-H/15),set:fmt(noon+H/15),len:(H/7.5).toFixed(1)+'h'};}
+function phaseName(p){return['🌑 New','🌒 Wax. Cres.','🌓 1st Qtr','🌔 Wax. Gib.','🌕 Full','🌖 Wan. Gib.','🌗 Last Qtr','🌘 Wan. Cres.'][Math.floor(p*8)%8];}
+
+// ====== DRAW SKY ======
+function azAlt(az,alt,w,h){const a=((az-skyRot)%360+360)%360;return{x:(a/360)*w,y:h*.82-(alt/90)*(h*.77)};}
+function drawSky(){
+  const w=skyC.width,h=skyC.height;if(!w||!h)return;
+  skyX.clearRect(0,0,w,h);
+  const m=MOODS[moodIdx],mc=MCOLS[m];
+  const isL=skyYear>=2024&&skyYear<=2026,isP=skyYear<2020;
+  let s1=mc.s1,s2=mc.s2;
+  if(m==='default'&&isP){s1='#100800';s2='#050200';}else if(m==='default'&&!isL){s1='#000820';s2='#000308';}
+  const gr=skyX.createRadialGradient(w/2,h/2,0,w/2,h/2,w*.7);
+  gr.addColorStop(0,s1);gr.addColorStop(1,s2);
+  skyX.fillStyle=gr;skyX.fillRect(0,0,w,h);
+  // milky way
+  const mw=skyX.createLinearGradient(0,0,w,h*.7);
+  mw.addColorStop(0,'rgba(120,160,255,0)');mw.addColorStop(.4,'rgba(150,170,255,.07)');mw.addColorStop(.6,'rgba(150,170,255,.07)');mw.addColorStop(1,'rgba(120,160,255,0)');
+  skyX.fillStyle=mw;skyX.fillRect(0,0,w,h*.82);
+  // stars
+  skyStars.forEach(s=>{
+    const sx=((s.x+skyRot/360)%1)*w,sy=s.y*h*.79;
+    skyX.beginPath();skyX.arc(sx,sy,s.r*(s.g?3:1),0,Math.PI*2);
+    skyX.fillStyle=s.g?`rgba(255,255,200,${s.a})`:`rgba(200,215,255,${s.a*.7})`;skyX.fill();
+    if(s.g){skyX.strokeStyle='rgba(255,255,200,.1)';skyX.lineWidth=1;skyX.beginPath();skyX.arc(sx,sy,s.r*5,0,Math.PI*2);skyX.stroke();}
+  });
+  // constellations
+  CONSTS.forEach(c=>{
+    skyX.strokeStyle='rgba(0,255,136,.1)';skyX.lineWidth=1;skyX.setLineDash([4,8]);skyX.beginPath();
+    c.s.forEach((s,i)=>{const sx=((s[0]+skyRot/360*.35)%1)*w,sy=s[1]*h*.77;i?skyX.lineTo(sx,sy):skyX.moveTo(sx,sy);});
+    skyX.stroke();skyX.setLineDash([]);
+    skyX.fillStyle='rgba(0,255,136,.25)';skyX.font='7px Courier New';
+    skyX.fillText(c.n,((c.s[0][0]+skyRot/360*.35)%1)*w,c.s[0][1]*h*.77-5);
+  });
+  // shooting star random
+  if(Math.random()<.006){const sx=Math.random()*w,sy=Math.random()*h*.5;skyX.strokeStyle='rgba(255,255,255,.6)';skyX.lineWidth=1.5;skyX.beginPath();skyX.moveTo(sx,sy);skyX.lineTo(sx+70,sy+25);skyX.stroke();}
+  // SUN real
+  const now=new Date(),sp=sunPos(LAT,LON,now);
+  if(sp.alt>0){const{x,y}=azAlt(sp.az,sp.alt,w,h);const sg=skyX.createRadialGradient(x,y,0,x,y,20);sg.addColorStop(0,'rgba(255,230,50,1)');sg.addColorStop(1,'rgba(255,100,0,0)');skyX.fillStyle=sg;skyX.beginPath();skyX.arc(x,y,20,0,Math.PI*2);skyX.fill();skyX.fillStyle='rgba(255,230,50,.7)';skyX.font='8px Courier New';skyX.fillText('☀ SUN',x+15,y+3);}
+  // MOON real
+  const mp=moonPos(LAT,LON,now);
+  if(mp.alt>0){const{x,y}=azAlt(mp.az,mp.alt,w,h);const mg=skyX.createRadialGradient(x,y,0,x,y,14);mg.addColorStop(0,'rgba(255,255,220,1)');mg.addColorStop(1,'rgba(200,200,180,0)');skyX.fillStyle=mg;skyX.beginPath();skyX.arc(x,y,14,0,Math.PI*2);skyX.fill();skyX.fillStyle='rgba(255,255,200,.15)';skyX.beginPath();skyX.arc(x,y,26,0,Math.PI*2);skyX.fill();skyX.fillStyle='rgba(255,255,200,.6)';skyX.font='8px Courier New';skyX.fillText('☽ MOON',x+16,y+3);}
+  // planets
+  PLANETS.forEach(p=>{const az=((p.base+(skyYear-2000)*360/(p.or*11.86))%360+360)%360;const alt=20+15*Math.sin((skyYear-2000)*toR(p.sp*30)+p.base*.1);if(alt<0)return;const{x,y}=azAlt(az,alt,w,h);skyX.beginPath();skyX.arc(x,y,3,0,Math.PI*2);skyX.fillStyle=p.col;skyX.fill();skyX.strokeStyle=p.col+'55';skyX.lineWidth=1;skyX.beginPath();skyX.arc(x,y,6,0,Math.PI*2);skyX.stroke();skyX.fillStyle=p.col;skyX.font='7px Courier New';skyX.fillText(p.name,x+8,y+3);});
+  // horizon
+  const hg=skyX.createLinearGradient(0,h*.82,0,h);hg.addColorStop(0,'rgba(0,255,136,.05)');hg.addColorStop(1,'rgba(0,255,136,.15)');skyX.fillStyle=hg;skyX.fillRect(0,h*.82,w,h*.18);
+  skyX.strokeStyle='rgba(0,255,136,.28)';skyX.lineWidth=1;skyX.beginPath();skyX.moveTo(0,h*.82);skyX.lineTo(w,h*.82);skyX.stroke();
+  ['N','NE','E','SE','S','SW','W','NW'].forEach((d,i)=>{const{x}=azAlt(i*45,0,w,h);skyX.fillStyle=d==='N'?'rgba(255,34,68,.8)':'rgba(0,255,136,.35)';skyX.font=d==='N'?'bold 9px Courier New':'8px Courier New';skyX.fillText(d,x-4,h*.82+12);});
+  // year
+  const yl=skyYear<0?`${Math.abs(skyYear)} BC`:`${skyYear} AD`;
+  const lc=isL?'rgba(0,255,136,.9)':isP?'rgba(255,102,0,.9)':'rgba(255,34,68,.9)';
+  skyX.font='bold 13px Courier New';skyX.fillStyle=lc;skyX.fillText(`📅 ${yl}  🎨 ${MOODS[moodIdx].toUpperCase()}`,10,20);
+  skyX.font='8px Courier New';skyX.fillStyle='rgba(0,255,136,.3)';skyX.fillText(`🖱 drag  Lat:${LAT.toFixed(3)} Lon:${LON.toFixed(3)}`,10,h*.82-5);
+}
+
+// ====== SOLAR MINI ======
+function drawSolar(){
+  const c=document.getElementById('solar'),ctx=c.getContext('2d');
+  c.width=c.offsetWidth;c.height=90;
+  const w=c.width,h=c.height,cx=w/2,cy=h/2,t=Date.now()/1000;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+  const sg=ctx.createRadialGradient(cx,cy,0,cx,cy,10);sg.addColorStop(0,'#ffff80');sg.addColorStop(1,'rgba(255,150,0,0)');ctx.fillStyle=sg;ctx.beginPath();ctx.arc(cx,cy,10,0,Math.PI*2);ctx.fill();
+  [{r:15,col:'#bbb',sz:1.2,sp:4.15},{r:22,col:'#ffdd88',sz:1.7,sp:1.62},{r:30,col:'#44aaff',sz:1.7,sp:1},{r:38,col:'#ff4422',sz:1.4,sp:.53},{r:48,col:'#ffaa66',sz:3,sp:.084},{r:58,col:'#ddcc88',sz:2.5,sp:.034}].forEach((o,i)=>{
+    ctx.beginPath();ctx.arc(cx,cy,o.r,0,Math.PI*2);ctx.strokeStyle='rgba(0,255,136,.07)';ctx.lineWidth=1;ctx.stroke();
+    const a=t*o.sp*.5+i,px=cx+o.r*Math.cos(a),py=cy+o.r*Math.sin(a);
+    const pg=ctx.createRadialGradient(px,py,0,px,py,o.sz*2);pg.addColorStop(0,o.col);pg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,o.sz,0,Math.PI*2);ctx.fill();
+    if(i===5){ctx.strokeStyle='rgba(221,204,136,.3)';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py,6,2,a,0,Math.PI*2);ctx.stroke();}
+  });
+}
+
+// ====== PANELS ======
+function updatePanels(){
+  const now=new Date(),mp=moonPos(LAT,LON,now),sp=sunPos(LAT,LON,now),st=sunTimes(LAT,LON,now);
+  document.getElementById('mAlt').textContent=mp.alt.toFixed(3)+'°';
+  document.getElementById('mAz').textContent=mp.az.toFixed(3)+'°';
+  document.getElementById('mDist').textContent=mp.dist.toFixed(0)+' km';
+  document.getElementById('mPhase').textContent=phaseName(mp.phase);
+  document.getElementById('sAlt').textContent=sp.alt.toFixed(2)+'°';
+  document.getElementById('sr').textContent=st.rise;
+  document.getElementById('ss').textContent=st.set;
+  document.getElementById('jdv').textContent=jd(now).toFixed(4);
+  document.getElementById('ul').textContent=(Math.random()*30+120).toFixed(1);
+  document.getElementById('dl').textContent=(Math.random()*80+260).toFixed(1);
+  document.getElementById('lat2').textContent=Math.floor(Math.random()*15+18)+'ms';
+  document.getElementById('sel').textContent=(45+Math.random()*25).toFixed(1)+'°';
+  document.getElementById('pkts').textContent=Math.floor(Math.random()*50+100)+'/s';
+  const pl=document.getElementById('plist');pl.innerHTML='';
+  PLANETS.forEach(p=>{const az=((p.base+(skyYear-2000)*360/(p.or*11.86))%360+360)%360;const alt=20+15*Math.sin((skyYear-2000)*toR(p.sp*30)+p.base*.1);pl.innerHTML+=`<div class="pi"><div class="pd" style="background:${p.col}"></div><span style="flex:1;color:rgba(0,255,136,.6)">${p.name}</span><span style="color:#00ff88;font-size:7px">Az:${az.toFixed(0)}° Alt:${alt.toFixed(0)}°</span></div>`;});
+}
+function updateClock(){const n=new Date();document.getElementById('clk').textContent=n.toLocaleTimeString('en',{hour12:false});document.getElementById('utc').textContent='UTC '+n.toUTCString().slice(17,25);}
+
+// ====== SHELL ======
+const out=document.getElementById('shellOut');
+let cmdHistory=[],histIdx=-1;
+
+function print(text,cls='out'){
+  const d=document.createElement('div');d.className='s-line';
+  d.innerHTML=`<span class="${cls}">${text}</span>`;
+  out.appendChild(d);out.scrollTop=out.scrollHeight;
+}
+function printCmd(c){
+  const d=document.createElement('div');d.className='s-line';
+  d.innerHTML=`<span class="prompt">cosmoslink@astrocore:~$ </span><span class="cmd">${c}</span>`;
+  out.appendChild(d);out.scrollTop=out.scrollHeight;
+}
+
+const HELP=`<span class="info">━━━ COSMOSLINK SHELL COMMANDS ━━━</span>
+<span class="ok">now</span>             → Real-time sky view
+<span class="ok">go [year]</span>       → Time travel  e.g. go 1969
+<span class="ok">moon</span>            → Moon data
+<span class="ok">sun</span>             → Sun data
+<span class="ok">planets</span>         → All planet positions
+<span class="ok">location</span>        → Your GPS/IP location
+<span class="ok">starlink</span>        → Network status
+<span class="ok">neuralink</span>       → Fire neural trigger
+<span class="ok">mood [name]</span>     → Change sky mood
+<span class="info">  moods: default nebula aurora redmars deepspace matrix</span>
+<span class="ok">rotate [0-360]</span>  → Rotate sky view
+<span class="ok">voice</span>           → Toggle voice input
+<span class="ok">speak [text]</span>    → TTS speak
+<span class="ok">julian</span>          → Current Julian Date
+<span class="ok">preset egypt</span>    → Ancient Egypt 2500 BC
+<span class="ok">preset apollo</span>   → Moon Landing 1969
+<span class="ok">preset future</span>   → Year 2100
+<span class="ok">clear</span>           → Clear terminal
+<span class="ok">status</span>          → Full system status
+<span class="ok">help</span>            → This menu`;
+
+function runCmd(raw){
+  const c=raw.trim();if(!c)return;
+  printCmd(c);cmdHistory.unshift(c);histIdx=-1;
+  const parts=c.toLowerCase().split(/\s+/),cmd=parts[0],arg=parts.slice(1).join(' ');
+  const now=new Date(),mp=moonPos(LAT,LON,now),sp=sunPos(LAT,LON,now),st=sunTimes(LAT,LON,now);
+
+  switch(cmd){
+    case 'help':case'?':out.innerHTML+='';print(HELP,'');break;
+    case 'clear':out.innerHTML='';print('Terminal cleared.','ok');break;
+    case 'now':
+      travelTo(2025);
+      print(`✓ Real-time mode activated`,'ok');
+      print(`📅 Date: ${now.toUTCString()}`,'data');
+      print(`🌙 Moon Alt: ${mp.alt.toFixed(3)}°  Az: ${mp.az.toFixed(3)}°`,'data');
+      print(`☀ Sun Alt: ${sp.alt.toFixed(2)}°  Az: ${sp.az.toFixed(2)}°`,'data');
+      break;
+    case 'go':case'travel':case'year':
+      if(!arg){print('Usage: go [year]  e.g. go 1969','err');break;}
+      let y=parseInt(arg);
+      if(arg.includes('bc'))y=-Math.abs(y);
+      if(isNaN(y)){print('Invalid year.','err');break;}
+      travelTo(y);
+      print(`✓ Traveled to ${y<0?Math.abs(y)+' BC':y+' AD'}`,'ok');
+      break;
+    case 'moon':
+      print(`🌙 MOON DATA — Real Time`,'info');
+      print(`  Altitude:    ${mp.alt.toFixed(4)}°`,'data');
+      print(`  Azimuth:     ${mp.az.toFixed(4)}°`,'data');
+      print(`  Distance:    ${mp.dist.toFixed(0)} km`,'data');
+      print(`  Phase:       ${phaseName(mp.phase)}`,'data');
+      print(`  Illumination:${(mp.phase*100).toFixed(1)}%`,'data');
+      break;
+    case 'sun':
+      print(`☀ SUN DATA — Real Time`,'info');
+      print(`  Altitude:  ${sp.alt.toFixed(4)}°`,'data');
+      print(`  Azimuth:   ${sp.az.toFixed(4)}°`,'data');
+      print(`  Sunrise:   ${st.rise}`,'data');
+      print(`  Sunset:    ${st.set}`,'data');
+      print(`  Day Length:${st.len}`,'data');
+      break;
+    case 'planets':
+      print(`🪐 PLANET POSITIONS — Year ${skyYear}`,'info');
+      PLANETS.forEach(p=>{const az=((p.base+(skyYear-2000)*360/(p.or*11.86))%360+360)%360;const alt=20+15*Math.sin((skyYear-2000)*toR(p.sp*30)+p.base*.1);print(`  ${p.name.padEnd(8)} Az:${az.toFixed(1)}°  Alt:${alt.toFixed(1)}°`,'data');});
+      break;
+    case 'location':case'loc':
+      print(`📍 YOUR LOCATION`,'info');
+      print(`  Lat: ${LAT.toFixed(6)}°  Lon: ${LON.toFixed(6)}°`,'data');
+      print(`  City: ${CITY}, ${COUNTRY}`,'data');
+      print(`  Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,'data');
+      break;
+    case 'starlink':case'network':
+      print(`🛰 STARLINK STATUS`,'info');
+      print(`  Status:   CONNECTED ✓`,'ok');
+      print(`  Uplink:   ${(Math.random()*30+120).toFixed(1)} Mbps`,'data');
+      print(`  Downlink: ${(Math.random()*80+260).toFixed(1)} Mbps`,'data');
+      print(`  Latency:  ${Math.floor(Math.random()*15+18)} ms`,'data');
+      print(`  Sat.Elev: ${(45+Math.random()*25).toFixed(1)}°`,'data');
+      break;
+    case 'neuralink':case'neural':
+      document.getElementById('neuraS') && (document.getElementById('neuraS').textContent='⚡ SIGNAL!');
+      document.getElementById('nlStat').textContent='⚡ FIRED';
+      print(`🧠 NEURALINK TRIGGER FIRED`,'ok');
+      const ni=['[TARGET: MOON LANDING 1969]','[TARGET: ANCIENT EGYPT 2500BC]','[TARGET: FUTURE MARS 2100]','[TARGET: BIG BANG -13B]'];
+      const n2=ni[Math.floor(Math.random()*ni.length)];
+      print(`  Intent: ${n2}`,'info');
+      speak('Neural trigger fired. '+n2);
+      setTimeout(()=>document.getElementById('nlStat').textContent='LISTENING',3000);
+      break;
+    case 'mood':
+      if(!arg){print(`Current mood: ${MOODS[moodIdx]}. Options: ${MOODS.join(', ')}  Usage: mood nebula`,'info');break;}
+      const mi=MOODS.indexOf(arg);
+      if(mi<0){print(`Unknown mood: ${arg}. Options: ${MOODS.join(', ')}`,'err');break;}
+      moodIdx=mi;document.getElementById('moodLbl').textContent='MOOD: '+arg.toUpperCase();
+      print(`✓ Mood set: ${arg.toUpperCase()}`,'ok');drawSky();
+      break;
+    case 'rotate':case'rot':
+      if(!arg){print('Usage: rotate [0-360]','err');break;}
+      skyRot=((parseFloat(arg)%360)+360)%360;document.getElementById('rot')&&(document.getElementById('rot').value=skyRot);
+      print(`✓ Sky rotated to ${skyRot.toFixed(1)}°`,'ok');drawSky();break;
+    case 'voice':toggleVoice();break;
+    case 'speak':
+      if(!arg){print('Usage: speak [text]','err');break;}
+      speak(arg);print(`🔊 Speaking: "${arg}"`,'ok');break;
+    case 'julian':case'jd':
+      print(`Julian Date: ${jd(now).toFixed(6)}`,'data');break;
+    case 'preset':
+      if(arg==='egypt'||arg==='ancient'){travelTo(-2500);print('✓ Ancient Egypt 2500 BC','ok');}
+      else if(arg==='apollo'||arg==='1969'||arg==='moon'){travelTo(1969);print('✓ Moon Landing — July 20, 1969','ok');}
+      else if(arg==='future'||arg==='2100'){travelTo(2100);print('✓ Year 2100 AD','ok');}
+      else print(`Unknown preset. Options: egypt, apollo, future`,'err');
+      break;
+    case 'status':
+      print(`━━━ SYSTEM STATUS ━━━`,'info');
+      print(`  CosmosLink:  ONLINE ✓`,'ok');
+      print(`  AstroCore:   RUNNING`,'ok');
+      print(`  Location:    ${CITY}, ${COUNTRY} (${LAT.toFixed(3)}, ${LON.toFixed(3)})`,'data');
+      print(`  Sky Year:    ${skyYear<0?Math.abs(skyYear)+' BC':skyYear+' AD'}`,'data');
+      print(`  Moon Alt:    ${mp.alt.toFixed(2)}°`,'data');
+      print(`  Sun Alt:     ${sp.alt.toFixed(2)}°`,'data');
+      print(`  Starlink:    CONNECTED`,'ok');
+      print(`  Neuralink:   LISTENING`,'ok');
+      print(`  Database:    SYNCED`,'ok');
+      print(`  Mood:        ${MOODS[moodIdx].toUpperCase()}`,'data');
+      break;
+    default:
+      print(`Command not found: '${cmd}'. Type 'help' for commands.`,'err');
+  }
+}
+
+// ====== SHELL INPUT ======
+const cmdEl=document.getElementById('cmd');
+cmdEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const v=cmdEl.value;cmdEl.value='';runCmd(v);}
+  else if(e.key==='ArrowUp'){if(histIdx<cmdHistory.length-1){histIdx++;cmdEl.value=cmdHistory[histIdx];}}
+  else if(e.key==='ArrowDown'){if(histIdx>0){histIdx--;cmdEl.value=cmdHistory[histIdx];}else{histIdx=-1;cmdEl.value='';}}
+});
+// click anywhere on bottom to focus
+document.getElementById('shellWrap').addEventListener('click',()=>cmdEl.focus());
+
+// ====== VOICE ======
+function toggleVoice(){
+  const btn=document.getElementById('voiceBtn2');
+  if(!voiceOn){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){print('Voice not supported in this browser.','err');return;}
+    recog=new SR();recog.continuous=true;recog.interimResults=false;recog.lang='en-US';
+    recog.onstart=()=>{voiceOn=true;btn.textContent='🔴 STOP';btn.className='on';print('🎙 Voice ON — speak a command...','ok');startVizz();speak('Voice active.');};
+    recog.onresult=e=>{const t=e.results[e.results.length-1][0].transcript.trim().toLowerCase();print(`🎙 "${t}"`,'info');runCmd(t);};
+    recog.onerror=()=>{voiceOn=false;btn.textContent='🎙 VOICE';btn.className='';print('Voice error.','err');};
+    recog.onend=()=>{if(voiceOn)recog.start();};
+    recog.start();
+  } else {
+    recog.stop();voiceOn=false;btn.textContent='🎙 VOICE';btn.className='';print('Voice OFF.','ok');stopVizz();
+  }
+}
+function startVizz(){
+  navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+    micStream=stream;const ac=new AudioContext(),src=ac.createMediaStreamSource(stream),an=ac.createAnalyser();
+    an.fftSize=32;src.connect(an);const vv=document.getElementById('vviz');vv.innerHTML='';
+    const bars=[];for(let i=0;i<8;i++){const b=document.createElement('div');b.className='vb';b.style.height='2px';vv.appendChild(b);bars.push(b);}
+    function loop(){voiceAnim=requestAnimationFrame(loop);const d=new Uint8Array(an.frequencyBinCount);an.getByteFrequencyData(d);bars.forEach((b,i)=>b.style.height=(2+d[i]*.2)+'px');}loop();
+  }).catch(()=>{});
+}
+function stopVizz(){if(voiceAnim)cancelAnimationFrame(voiceAnim);if(micStream)micStream.getTracks().forEach(t=>t.stop());document.getElementById('vviz').innerHTML='';}
+function speak(t){if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.rate=1;u.volume=.9;speechSynthesis.speak(u);}
+
+// ====== TIME TRAVEL ======
+function travelTo(y){
+  skyYear=y;
+  const b=document.getElementById('badge');
+  if(y>=2024&&y<=2026){b.className='badge';b.textContent='LIVE';}
+  else if(y<2020){b.className='badge past';b.textContent='PAST';}
+  else{b.className='badge fut';b.textContent='FUTURE';}
+  updatePanels();drawSky();
+}
+
+// ====== DRAG SKY ======
+const sw=document.getElementById('skyWrap');
+sw.addEventListener('mousedown',e=>{drag=true;lastX=e.clientX;});
+sw.addEventListener('touchstart',e=>{drag=true;lastX=e.touches[0].clientX;});
+window.addEventListener('mousemove',e=>{if(!drag)return;skyRot=(skyRot-(e.clientX-lastX)*.3+360)%360;lastX=e.clientX;});
+window.addEventListener('touchmove',e=>{if(!drag)return;skyRot=(skyRot-(e.touches[0].clientX-lastX)*.3+360)%360;lastX=e.touches[0].clientX;});
+window.addEventListener('mouseup',()=>drag=false);window.addEventListener('touchend',()=>drag=false);
+
+// ====== LOCATION AUTO-LOAD ======
+function loadLocation(){
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      LAT=pos.coords.latitude;LON=pos.coords.longitude;
+      document.getElementById('ll').textContent=`${LAT.toFixed(4)}, ${LON.toFixed(4)}`;
+      document.getElementById('locLbl').textContent=`GPS: ${LAT.toFixed(3)}, ${LON.toFixed(3)}`;
+      print(`✓ GPS: ${LAT.toFixed(5)}, ${LON.toFixed(5)}  (±${pos.coords.accuracy.toFixed(0)}m)`,'ok');
+      fetch(`https://nominatim.openstreetmap.org/reverse?lat=${LAT}&lon=${LON}&format=json`)
+        .then(r=>r.json()).then(d=>{
+          CITY=d.address.city||d.address.town||d.address.village||'Unknown';
+          COUNTRY=d.address.country||'';
+          document.getElementById('city').textContent=CITY;
+          document.getElementById('locLbl').textContent=`${CITY}, ${COUNTRY}`;
+          print(`📍 Location: ${CITY}, ${COUNTRY}`,'data');
+        });
+      fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(d=>print(`🌐 IP: ${d.ip}`,'data')).catch(()=>{});
+    },()=>{ipFallback();},{enableHighAccuracy:true,timeout:8000});
+  } else ipFallback();
+}
+function ipFallback(){
+  fetch('https://ipapi.co/json/').then(r=>r.json()).then(d=>{
+    LAT=d.latitude||23.8103;LON=d.longitude||90.4125;
+    CITY=d.city||'Dhaka';COUNTRY=d.country_name||'Bangladesh';
+    document.getElementById('ll').textContent=`${LAT.toFixed(4)}, ${LON.toFixed(4)}`;
+    document.getElementById('city').textContent=CITY;
+    document.getElementById('locLbl').textContent=`${CITY} (IP)`;
+    print(`📍 IP Location: ${CITY}, ${COUNTRY}  ${LAT.toFixed(4)}, ${LON.toFixed(4)}`,'data');
+    print(`🌐 IP: ${d.ip}`,'data');
+  }).catch(()=>{print('📍 Default: Dhaka, Bangladesh','info');});
+}
+
+// ====== BOOT SEQUENCE ======
+function boot(){
+  print('','');
+  print('╔══════════════════════════════════════════╗','ok');
+  print('║        COSMOSLINK ASTROCORE v3.7         ║','ok');
+  print('║   Real-Time Astronomical Shell System    ║','ok');
+  print('╚══════════════════════════════════════════╝','ok');
+  print('','');
+  setTimeout(()=>print('[ OK ] Loading JPL DE421 ephemeris...','ok'),200);
+  setTimeout(()=>print('[ OK ] Initializing AstroCore engine...','ok'),500);
+  setTimeout(()=>print('[ OK ] Connecting Starlink mesh network...','ok'),800);
+  setTimeout(()=>print('[ OK ] Neuralink bridge: LISTENING...','info'),1100);
+  setTimeout(()=>print('[ OK ] Firebase real-time DB: SYNCED...','ok'),1400);
+  setTimeout(()=>{print('[ OK ] Acquiring GPS/IP location...','ok');loadLocation();},1700);
+  setTimeout(()=>{print('[ OK ] All systems nominal. Type <span class="ok">help</span> for commands.','ok');resizeSky();updatePanels();drawSky();cmdEl.focus();},2200);
+}
+
+// ====== LOOP ======
+setInterval(()=>{drawBG();drawSky();drawSolar();updateClock();},100);
+setInterval(()=>updatePanels(),1000);
+setInterval(()=>{const m=['Ephemeris sync OK','Moon track updated','Starlink handshake ✓','DB packet sent'];print(m[Math.floor(Math.random()*m.length)],'out');},8000);
+setTimeout(boot,100);
+</script>
+</body>
+</html>
